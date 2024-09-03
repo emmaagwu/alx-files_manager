@@ -5,31 +5,24 @@ class RedisClient {
    * Creates a new RedisClient instance.
    */
   constructor() {
+    this.client = createClient();
     this.isClientConnected = false;
-    this.client = this.initializeClient();
-  }
 
-  /**
-   * Initializes the Redis client and handles connection events.
-   */
-  async initializeClient() {
-    const client = createClient();
-
-    client.on('error', (err) => {
-      console.error('Redis client failed to connect:', err.message || err.toString());
+    // Handle Redis connection errors
+    this.client.on('error', (err) => {
+      console.error('Redis client error:', err.message || err.toString());
       this.isClientConnected = false;
     });
 
-    try {
-      await client.connect();
+    // Handle successful connection
+    this.client.on('connect', () => {
       this.isClientConnected = true;
-      console.log('Redis client connected successfully');
-    } catch (err) {
-      console.error('Redis client connection failed:', err.message || err.toString());
-      this.isClientConnected = false;
-    }
+    });
 
-    return client;
+    // Connect the client explicitly
+    this.client.connect().catch((err) => {
+      console.error('Redis client failed to connect:', err.message || err.toString());
+    });
   }
 
   /**
