@@ -1,6 +1,7 @@
 import express from 'express';
 import AppController from '../controllers/AppController';
 import UsersController from '../controllers/UsersController';
+import AuthController from '../controllers/AuthController';
 
 function controllerRouting(app) {
   const router = express.Router();
@@ -28,6 +29,18 @@ function controllerRouting(app) {
   // should retrieve the user base on the token used
   router.get('/users/me', (req, res) => {
     UsersController.getMe(req, res);
+  });
+
+  // Auth Controller
+
+  // should sign-in the user by generating a new authentication token
+  router.get('/connect', (req, res) => {
+    AuthController.getConnect(req, res);
+  });
+
+  // should sign-out the user based on the token
+  router.get('/disconnect', (req, res) => {
+    AuthController.getDisconnect(req, res);
   });
 }
 
