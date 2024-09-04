@@ -16,3 +16,6 @@ function controllerRouting(app) {
   router.get('/stats', (req, res) => {
     AppController.getStats(req, res);
   });
+}
+
+export default controllerRouting;
