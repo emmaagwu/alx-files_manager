@@ -1,4 +1,5 @@
 import { ObjectId } from 'mongodb';
+import mime from 'mime-types';
 import Queue from 'bull';
 import userUtils from '../utils/user';
 import fileUtils from '../utils/file';
@@ -95,49 +96,103 @@ class FilesController {
   }
 
   /**
-   * Should return the content of the file document based on the ID
+   * Should retrieve the file document based on the ID
    *
-   * If no file document is linked to the ID passed as parameter, return an error
-   * Not found with a status code 404
-   * If the file document (folder or file) is not public (isPublic: false) and no user
-   * authenticate or not the owner of the
-   * file, return an error Not found with a status code 404
-   * If the type of the file document is folder, return an error A folder doesn't have content
-   * with a status code 400
-   * If the file is not locally present, return an error Not found with a status code 404
-   * Otherwise:
-   * By using the module mime-types, get the MIME-type based on the name of the file
-   * Return the content of the file with the correct MIME-type
+   * Retrieve the user based on the token:
+   * If not found, return an error Unauthorized with a status code 401
+   * If no file document is linked to the user and the ID passed as
+   * parameter, return an error Not found with a status code 404
+   * Otherwise, return the file document
    */
-  static async getFile(request, response) {
+  static async getShow(request, response) {
+    const fileId = request.params.id;
+
     const { userId } = await userUtils.getUserIdAndKey(request);
-    const { id: fileId } = request.params;
-    const size = request.query.size || 0;
 
-    // Mongo Condition for Id
-    if (!basicUtils.isValidId(fileId)) { return response.status(404).send({ error: 'Not found' }); }
-
-    const file = await fileUtils.getFile({
-      _id: ObjectId(fileId),
+    const user = await userUtils.getUser({
+      _id: ObjectId(userId),
     });
 
-    if (!file || !fileUtils.isOwnerAndPublic(file, userId)) { return response.status(404).send({ error: 'Not found' }); }
+    if (!user) return response.status(401).send({ error: 'Unauthorized' });
 
-    if (file.type === 'folder') {
-      return response
-        .status(400)
-        .send({ error: "A folder doesn't have content" });
+    // Mongo Condition for Id
+    if (!basicUtils.isValidId(fileId) || !basicUtils.isValidId(userId)) { return response.status(404).send({ error: 'Not found' }); }
+
+    const result = await fileUtils.getFile({
+      _id: ObjectId(fileId),
+      userId: ObjectId(userId),
+    });
+
+    if (!result) return response.status(404).send({ error: 'Not found' });
+
+    const file = fileUtils.processFile(result);
+
+    return response.status(200).send(file);
+  }
+
+  /**
+   * should retrieve all users file documents for a specific
+   * parentId and with pagination
+   *
+   * Retrieve the user based on the token:
+   * If not found, return an error Unauthorized with a status code 401
+   * Based on the query parameters parentId and page, return the list of file document
+   * parentId:
+   * No validation of parentId needed - if the parentId is not linked to any user folder,
+   * returns an empty list
+   * By default, parentId is equal to 0 = the root
+   * Pagination:
+   * Each page should be 20 items max
+   * page query parameter starts at 0 for the first page. If equals to 1, it means it’s
+   * the second page (form the 20th to the 40th), etc
+   * Pagination can be done directly by the aggregate of MongoDB
+   */
+  static async getIndex(request, response) {
+    const { userId } = await userUtils.getUserIdAndKey(request);
+
+    const user = await userUtils.getUser({
+      _id: ObjectId(userId),
+    });
+
+    if (!user) return response.status(401).send({ error: 'Unauthorized' });
+
+    let parentId = request.query.parentId || '0';
+
+    if (parentId === '0') parentId = 0;
+
+    let page = Number(request.query.page) || 0;
+
+    if (Number.isNaN(page)) page = 0;
+
+    if (parentId !== 0 && parentId !== '0') {
+      if (!basicUtils.isValidId(parentId)) { return response.status(401).send({ error: 'Unauthorized' }); }
+
+      parentId = ObjectId(parentId);
+
+      const folder = await fileUtils.getFile({
+        _id: ObjectId(parentId),
+      });
+
+      if (!folder || folder.type !== 'folder') { return response.status(200).send([]); }
     }
 
-    const { error, code, data } = await fileUtils.getFileData(file, size);
+    const pipeline = [
+      { $match: { parentId } },
+      { $skip: page * 20 },
+      {
+        $limit: 20,
+      },
+    ];
 
-    if (error) return response.status(code).send({ error });
+    const fileCursor = await fileUtils.getFilesOfParentId(pipeline);
 
-    const mimeType = mime.contentType(file.name);
+    const fileList = [];
+    await fileCursor.forEach((doc) => {
+      const document = fileUtils.processFile(doc);
+      fileList.push(document);
+    });
 
-    response.setHeader('Content-Type', mimeType);
-
-    return response.status(200).send(data);
+    return response.status(200).send(fileList);
   }
 
   /**
@@ -184,7 +239,7 @@ class FilesController {
     return response.status(code).send(updatedFile);
   }
 
- /**
+  /**
    * Should return the content of the file document based on the ID
    *
    * If no file document is linked to the ID passed as parameter, return an error
@@ -199,35 +254,35 @@ class FilesController {
    * By using the module mime-types, get the MIME-type based on the name of the file
    * Return the content of the file with the correct MIME-type
    */
- static async getFile(request, response) {
-  const { userId } = await userUtils.getUserIdAndKey(request);
-  const { id: fileId } = request.params;
-  const size = request.query.size || 0;
+  static async getFile(request, response) {
+    const { userId } = await userUtils.getUserIdAndKey(request);
+    const { id: fileId } = request.params;
+    const size = request.query.size || 0;
 
-  // Mongo Condition for Id
-  if (!basicUtils.isValidId(fileId)) { return response.status(404).send({ error: 'Not found' }); }
+    // Mongo Condition for Id
+    if (!basicUtils.isValidId(fileId)) { return response.status(404).send({ error: 'Not found' }); }
 
-  const file = await fileUtils.getFile({
-    _id: ObjectId(fileId),
-  });
+    const file = await fileUtils.getFile({
+      _id: ObjectId(fileId),
+    });
 
-  if (!file || !fileUtils.isOwnerAndPublic(file, userId)) { return response.status(404).send({ error: 'Not found' }); }
+    if (!file || !fileUtils.isOwnerAndPublic(file, userId)) { return response.status(404).send({ error: 'Not found' }); }
 
-  if (file.type === 'folder') {
-    return response
-      .status(400)
-      .send({ error: "A folder doesn't have content" });
-  }
+    if (file.type === 'folder') {
+      return response
+        .status(400)
+        .send({ error: "A folder doesn't have content" });
+    }
 
-  const { error, code, data } = await fileUtils.getFileData(file, size);
+    const { error, code, data } = await fileUtils.getFileData(file, size);
 
-  if (error) return response.status(code).send({ error });
+    if (error) return response.status(code).send({ error });
 
-  const mimeType = mime.contentType(file.name);
+    const mimeType = mime.contentType(file.name);
 
-  response.setHeader('Content-Type', mimeType);
+    response.setHeader('Content-Type', mimeType);
 
-  return response.status(200).send(data);
+    return response.status(200).send(data);
   }
 }
 

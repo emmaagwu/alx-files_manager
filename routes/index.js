@@ -51,8 +51,8 @@ function controllerRouting(app) {
     FilesController.postUpload(req, res);
   });
 
-   // should retrieve the file document based on the ID
-   router.get('/files/:id', (req, res) => {
+  // should retrieve the file document based on the ID
+  router.get('/files/:id', (req, res) => {
     FilesController.getShow(req, res);
   });
 
