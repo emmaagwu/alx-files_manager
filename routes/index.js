@@ -16,6 +16,18 @@ function controllerRouting(app) {
   router.get('/stats', (req, res) => {
     AppController.getStats(req, res);
   });
+
+  // User Controller
+
+  // should create a new user in DB
+  router.post('/users', (req, res) => {
+    UsersController.postNew(req, res);
+  });
+
+  // should retrieve the user base on the token used
+  router.get('/users/me', (req, res) => {
+    UsersController.getMe(req, res);
+  });
 }
 
 export default controllerRouting;
