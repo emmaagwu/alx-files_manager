@@ -2,6 +2,7 @@ import express from 'express';
 import AppController from '../controllers/AppController';
 import UsersController from '../controllers/UsersController';
 import AuthController from '../controllers/AuthController';
+import FilesController from '../controllers/FilesController';
 
 function controllerRouting(app) {
   const router = express.Router();
@@ -41,6 +42,13 @@ function controllerRouting(app) {
   // should sign-out the user based on the token
   router.get('/disconnect', (req, res) => {
     AuthController.getDisconnect(req, res);
+  });
+
+  // Files Controller
+
+  // should create a new file in DB and in disk
+  router.post('/files', (req, res) => {
+    FilesController.postUpload(req, res);
   });
 }
 
